@@ -42,6 +42,7 @@ import json
 import re
 import subprocess
 import sys
+import os
 from collections import OrderedDict
 from distutils.version import LooseVersion
 
@@ -76,6 +77,28 @@ check_cmd = "{pip_cmd} list {arg} --retries=1 --disable-pip-version-check --form
 # which messes up the table. These are capped by default to 10 characters.
 # Can be overridden with -f.
 version_length = 10
+
+
+# Check if a program  exists
+def which(program):
+    import os
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        # start with path from sys.executable
+        current, _ = os.path.split(sys.executable)
+        for path in ([current] + os.environ["PATH"].split(os.pathsep)):
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+
+    return None
+
 
 # Text IO
 def windows_out(text):
@@ -213,6 +236,7 @@ def get_package_versions(options, outdated=True):
 
 
 def main():
+    global pip_cmd
     parser = argparse.ArgumentParser(
         description="A quick overview of all installed packages "
         "and their update status."
@@ -229,7 +253,7 @@ def main():
         "-c",
         "--cmd",
         dest="pip_cmd",
-        default=pip_cmd,
+        default=None,
         help="The pip executable to run. Default: `pip`",
     )
     parser.add_argument(
@@ -288,6 +312,25 @@ def main():
         help="Disable coloring of text and tables.",
     )
     options = parser.parse_args()
+
+    
+    if options.pip_cmd is None:
+        options.pip_cmd = which(pip_cmd)
+        if options.pip_cmd is None:
+            # try if pip3 is available
+            options.pip_cmd = which("pip3")
+        if options.pip_cmd is None:
+            out("Neither 'pip' nor 'pip3' command is available, please install it or specify its path with '--cmd' option.\n")
+    # Check if user provided pip command
+    else:
+        pip_cmd = which(options.pip_cmd)
+        if pip_cmd is None:
+            out("The specified pip command '{pip_cmd}' is not available.\n".format(pip_cmd=options.pip_cmd))
+            exit(1)
+        else:
+            options.pip_cmd = pip_cmd
+
+    print(options.pip_cmd)
 
     # The pip check factory
     check_pip_version(options)
